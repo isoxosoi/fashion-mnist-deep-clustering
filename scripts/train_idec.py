@@ -4,6 +4,11 @@ IDEC 학습
 Autoencoder + Clustering 동시 최적화
 """
 
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import os
 import numpy as np
 import torch
@@ -158,7 +163,7 @@ def main():
     print(f"\n✅ Device: {device}")
     
     # 랜덤 시드
-    seed = config['training']['seed']
+    seed = config['seed']
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)

@@ -4,6 +4,12 @@ K-Means 베이스라인
 Raw pixel 데이터에 직접 K-Means 적용
 """
 
+
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import os
 import numpy as np
 import torch
@@ -28,7 +34,7 @@ def main():
     create_directories(config)
     
     # 랜덤 시드 설정
-    seed = config['training']['seed']
+    seed = config['seed']
     np.random.seed(seed)
     torch.manual_seed(seed)
     

@@ -3,6 +3,10 @@
 Autoencoder 사전학습
 이미지 복원 능력 학습
 """
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 import os
 import numpy as np
@@ -97,7 +101,7 @@ def main():
     print(f"\n✅ Device: {device}")
     
     # 랜덤 시드
-    seed = config['training']['seed']
+    seed = config['seed']
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)

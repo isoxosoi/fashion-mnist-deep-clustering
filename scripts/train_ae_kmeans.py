@@ -4,6 +4,11 @@ AE + K-Means
 사전학습된 Autoencoder의 latent space에 K-Means 적용
 """
 
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import os
 import numpy as np
 import torch
@@ -61,7 +66,7 @@ def main():
     print(f"\n✅ Device: {device}")
     
     # 랜덤 시드
-    seed = config['training']['seed']
+    seed = config['seed']
     np.random.seed(seed)
     torch.manual_seed(seed)
     
