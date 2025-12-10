@@ -1,0 +1,86 @@
+# configs/config.yaml
+# 프로그램 실행에 필요한 모든 설정값을 한 곳에 모아놓은 파일
+# Fashion-MNIST Deep Clustering Configuration
+
+# ==================== Dataset ====================
+data:
+  dataset_name: "FashionMNIST"
+  data_dir: "./data/raw"
+  batch_size: 256
+  num_workers: 0 # Windows에서는 0 권장 (CPU only)
+  shuffle: true
+
+# ==================== Model Architecture ====================
+model:
+  # Autoencoder
+  input_dim: 784 # 28x28 flattened
+  latent_dim: 10
+  hidden_dims: [500, 500, 2000] # Encoder hidden layers
+
+  # IDEC
+  n_clusters: 10 # Fashion-MNIST has 10 classes
+  alpha: 1.0 # Student t-distribution parameter
+
+# ==================== Training ====================
+training:
+  # Device
+  device: "cpu" # "cuda" if GPU available
+
+  # Autoencoder Pretraining
+  pretrain_epochs: 50
+  pretrain_lr: 0.001
+  pretrain_optimizer: "adam"
+
+  # IDEC Fine-tuning
+  finetune_epochs: 100
+  finetune_lr: 0.01
+  finetune_momentum: 0.9
+  finetune_optimizer: "sgd"
+
+  # Loss weights
+  gamma: 0.1 # Clustering loss weight (L = L_rec + gamma * L_clu)
+
+  # Update strategy
+  update_interval: 10 # Update target distribution every N epochs
+  tol: 0.001 # Tolerance for early stopping
+
+  # Logging
+  print_freq: 10 # Print every N epochs
+  save_freq: 20 # Save checkpoint every N epochs
+
+# ==================== Clustering ====================
+clustering:
+  # Baseline K-Means
+  n_init: 20 # Number of K-Means initializations
+  max_iter: 300
+  random_state: 42
+
+# ==================== Evaluation ====================
+evaluation:
+  metrics: ["NMI", "ARI", "ACC"] # Normalized Mutual Info, Adjusted Rand Index, Accuracy
+  save_confusion_matrix: true
+  save_tsne: true
+  tsne_perplexity: 30
+  tsne_n_iter: 300
+
+# ==================== Paths ====================
+paths:
+  # Output directories
+  results_dir: "./results"
+  checkpoint_dir: "./results/checkpoints"
+  figures_dir: "./results/figures"
+  logs_dir: "./results/logs"
+
+  # Model checkpoints
+  pretrained_ae: "./results/checkpoints/autoencoder.pth"
+  pretrained_idec: "./results/checkpoints/idec.pth"
+
+# ==================== Reproducibility ====================
+seed: 42
+deterministic: true
+
+# ==================== Experiment ====================
+experiment:
+  name: "fashion_mnist_idec"
+  description: "IDEC clustering on Fashion-MNIST"
+  tags: ["deep-clustering", "idec", "fashion-mnist"]
