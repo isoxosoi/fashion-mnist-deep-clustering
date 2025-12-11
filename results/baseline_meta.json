@@ -1,0 +1,7 @@
+{
+  "n_clusters": 10,
+  "inertia": 1906648.75,
+  "n_samples": 60000,
+  "elapsed_time": 127.834861,
+  "seed": 42
+}

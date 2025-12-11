@@ -39,12 +39,11 @@ data/__pycache__
 *.npy
 
 # Results
-results/
 checkpoints/
 logs/
-*.png
-*.jpg
 *.pdf
+results/*.npy
+results/*.pkl
 
 # Jupyter
 .ipynb_checkpoints/
