@@ -2,6 +2,10 @@
 """
 IDEC 학습
 Autoencoder + Clustering 동시 최적화
+
+핵심:
+- 학습: DataLoader 사용 (메모리 효율)
+- 예측: 전체 데이터 사용 (평가 일관성)
 """
 
 import sys
@@ -49,8 +53,11 @@ def initialize_cluster_centers(model, data_loader, n_clusters, device):
     
     latents = np.concatenate(latents, axis=0)
     
+    print(f"   추출된 latent vectors: {latents.shape}")
+    
     # K-Means로 초기화
-    kmeans = KMeans(n_clusters=n_clusters, n_init=20)
+    print(f"   K-Means 실행 중... (n_clusters={n_clusters})")
+    kmeans = KMeans(n_clusters=n_clusters, n_init=20, random_state=42)
     kmeans.fit(latents)
     
     print(f"✅ 클러스터 중심 초기화 완료 (Inertia: {kmeans.inertia_:.2f})")
@@ -120,28 +127,44 @@ def train_epoch(model, train_loader, optimizer, device, gamma):
     )
 
 
-def evaluate(model, test_loader, device):
+def predict_all_data(model, X_full, device, batch_size=256):
     """
-    평가
+    전체 데이터에 대한 예측
+    
+    핵심: 
+    - X_full은 CPU 메모리에만 로드 (188MB)
+    - batch_size씩 GPU로 복사 → 예측 → 제거 (10-20MB)
+    - torch.no_grad()로 gradient 계산 안 함
     
     Args:
         model: IDEC 모델
-        test_loader: 테스트 데이터 로더
+        X_full: 전체 데이터 (N, 784) - torch.Tensor
         device: 디바이스
+        batch_size: 배치 크기
         
     Returns:
-        predictions: 예측 라벨
+        predictions: 예측 라벨 (N,)
     """
     model.eval()
     predictions = []
     
-    with torch.no_grad():
-        for x, _ in test_loader:
-            x = x.to(device)
-            pred = model.predict(x)
-            predictions.append(pred.cpu().numpy())
+    n_samples = X_full.shape[0]
     
+    with torch.no_grad():  # Gradient 계산 안 함!
+        for i in range(0, n_samples, batch_size):
+            # 배치 데이터 (batch_size개씩만 GPU로)
+            batch_end = min(i + batch_size, n_samples)
+            x_batch = X_full[i:batch_end].to(device)
+            
+            # 예측
+            pred = model.predict(x_batch)
+            predictions.append(pred.cpu().numpy())
+            
+            # x_batch는 자동으로 GPU 메모리에서 제거됨
+    
+    # 합치기
     predictions = np.concatenate(predictions, axis=0)
+    
     return predictions
 
 
@@ -165,19 +188,30 @@ def main():
     # 랜덤 시드
     seed = config['seed']
     torch.manual_seed(seed)
+    np.random.seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
+    
+    print(f"✅ Seed: {seed}")
     
     # ============================================================
     # 2. 데이터 로드
     # ============================================================
     print(f"\n📂 데이터 로딩...")
+    
+    # 학습용: DataLoader (배치로 나눠서 메모리 효율적)
     train_loader, test_loader = get_fashion_mnist_loaders(
         batch_size=config['data']['batch_size'],
         data_dir=config['data']['data_dir']
     )
     
+    # 예측용: 전체 데이터 (CPU 메모리에만 로드, 188MB)
+    X_full, y_full = get_full_dataset(config['data']['data_dir'])
+    
     print(f"✅ 데이터 로드 완료")
+    print(f"   Train batches: {len(train_loader)}")
+    print(f"   Test batches: {len(test_loader)}")
+    print(f"   전체 데이터: {X_full.shape} (예측용)")
     
     # ============================================================
     # 3. Autoencoder 로드
@@ -194,11 +228,13 @@ def main():
     
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(
-            f"사전학습된 Autoencoder를 찾을 수 없습니다: {checkpoint_path}\n"
-            f"먼저 'python scripts/train_autoencoder.py'를 실행하세요."
+            f"❌ 사전학습된 Autoencoder를 찾을 수 없습니다:\n"
+            f"   {checkpoint_path}\n\n"
+            f"먼저 다음 명령을 실행하세요:\n"
+            f"   python scripts/train_autoencoder.py"
         )
     
-    autoencoder.load_state_dict(torch.load(checkpoint_path))
+    autoencoder.load_state_dict(torch.load(checkpoint_path, map_location=device))
     autoencoder = autoencoder.to(device)
     
     print(f"✅ Autoencoder 로드 완료")
@@ -210,7 +246,9 @@ def main():
     model = create_idec(autoencoder, config)
     model = model.to(device)
     
+    total_params = sum(p.numel() for p in model.parameters())
     print(f"✅ IDEC 생성 완료")
+    print(f"   Parameters: {total_params:,}개")
     
     # ============================================================
     # 5. 클러스터 중심 초기화
@@ -237,7 +275,8 @@ def main():
     print(f"\n⚙️  학습 설정:")
     print(f"   Epochs: {num_epochs}")
     print(f"   Learning rate: {config['training']['finetune_lr']}")
-    print(f"   Gamma: {gamma}")
+    print(f"   Gamma (clustering weight): {gamma}")
+    print(f"   Batch size: {config['data']['batch_size']}")
     
     # ============================================================
     # 7. 학습 루프
@@ -270,22 +309,33 @@ def main():
               f"Recon: {recon_loss:.6f} | "
               f"Cluster: {cluster_loss:.6f}")
         
-        # 주기적으로 예측 저장
+        # 주기적으로 예측 저장 (전체 60,000개)
         if epoch % 10 == 0 or epoch == num_epochs:
-            predictions = evaluate(model, test_loader, device)
-            np.save(
-                os.path.join(
-                    config['paths']['results_dir'],
-                    f'idec_predictions_epoch{epoch}.npy'
-                ),
-                predictions
+            print(f"   💾 전체 데이터 예측 중... ({X_full.shape[0]:,}개)")
+            
+            # 예측 (배치로 나눠서 처리, GPU 메모리 10-20MB만 사용)
+            predictions = predict_all_data(
+                model, X_full, device, 
+                batch_size=config['data']['batch_size']
             )
+            
+            # 저장
+            save_path = os.path.join(
+                config['paths']['results_dir'],
+                f'idec_predictions_epoch{epoch}.npy'
+            )
+            np.save(save_path, predictions)
+            
+            # 클러스터 분포 확인
+            unique, counts = np.unique(predictions, return_counts=True)
+            print(f"   📊 클러스터 분포: {dict(zip(unique, counts))}")
+            print(f"   ✅ 저장 완료: {save_path}")
     
     elapsed_time = (datetime.now() - start_time).total_seconds()
     
     print("-" * 80)
     print(f"✅ 학습 완료!")
-    print(f"   소요 시간: {elapsed_time/60:.2f}분")
+    print(f"   소요 시간: {elapsed_time/60:.2f}분 ({elapsed_time:.1f}초)")
     
     # ============================================================
     # 8. 모델 저장
@@ -297,16 +347,29 @@ def main():
     torch.save(model.state_dict(), model_path)
     
     # History 저장
-    np.save(
-        os.path.join(config['paths']['results_dir'], 'idec_history.npy'),
-        history
+    history_path = os.path.join(
+        config['paths']['results_dir'], 
+        'idec_history.npy'
     )
+    np.save(history_path, history)
     
-    print(f"\n💾 모델 저장 완료:")
-    print(f"   {model_path}")
+    print(f"\n💾 저장 완료:")
+    print(f"   모델: {model_path}")
+    print(f"   History: {history_path}")
+    
+    # ============================================================
+    # 9. 최종 통계
+    # ============================================================
+    print(f"\n📊 최종 손실:")
+    print(f"   Total Loss: {history['total_loss'][-1]:.6f}")
+    print(f"   Recon Loss: {history['recon_loss'][-1]:.6f}")
+    print(f"   Cluster Loss: {history['cluster_loss'][-1]:.6f}")
     
     print("\n" + "="*60)
     print("✅ IDEC 학습 완료!")
+    print("="*60)
+    print("\n다음 단계:")
+    print("   python scripts/evaluate.py")
     print("="*60 + "\n")
 
 

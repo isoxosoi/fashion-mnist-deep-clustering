@@ -1,0 +1,10 @@
+{
+  "n_clusters": 10,
+  "latent_dim": 10,
+  "inertia": 388679.625,
+  "n_samples": 60000,
+  "extract_time": 1.197463,
+  "kmeans_time": 8.568078,
+  "total_time": 9.765540999999999,
+  "seed": 42
+}
