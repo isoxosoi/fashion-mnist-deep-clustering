@@ -128,14 +128,6 @@ fashion-mnist-clustering/
 
 ---
 
-## 📖 참고 문헌
-
-1. Xie, J., et al. (2016). "Unsupervised Deep Embedding for Clustering Analysis." ICML.
-2. Guo, X., et al. (2017). "Improved Deep Embedded Clustering with Local Structure Preservation." IJCAI.
-3. Xiao, H., et al. (2017). "Fashion-MNIST: a Novel Image Dataset for Benchmarking Machine Learning Algorithms."
-
----
-
 ## 👥 작성자
 
 - **과목**: 인공지능응용
